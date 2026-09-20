@@ -198,6 +198,7 @@ const server = http.createServer(async (req, res) => {
       audit(user.id, 'settings.update', Object.keys(b).join(','));
       return json(res, { settings: s });
     }
+    if (p === '/api/models') return json(res, { models: await E.xkiroModels() });
     if (p === '/api/telegram/test' && req.method === 'POST') {
       const b = await body(req);
       try {

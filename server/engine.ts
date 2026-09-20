@@ -152,7 +152,7 @@ const exec: Record<string, (task: any, step: any) => Promise<void | 'awaiting'>>
     if (fixes.length) log(task, step, `Applying Review Agent fixes: ${fixes.join('; ')}`);
     log(task, step, 'Requesting Expo + TypeScript scaffold from xKiro (raw App.tsx source)…');
     let via = 'xKiro';
-    let code = await xkiroChat(null, `Scaffold a single-file React Native Expo app in TypeScript. Brief: "${String(task.prompt).slice(0, 800)}".${fixes.length ? ` Required fixes: ${fixes.join('; ')}.` : ''} Output ONLY raw App.tsx source code: no markdown, no fences, no explanations. Use only react-native core components, typed props, and end with export default App.`, 45000);
+    let code = await xkiroChat(null, `Scaffold a single-file React Native Expo app in TypeScript. Brief: "${String(task.prompt).slice(0, 800)}".${fixes.length ? ` Required fixes: ${fixes.join('; ')}.` : ''} Output ONLY raw App.tsx source code: no markdown, no fences, no explanations. Use only react-native core components, typed props, and end with export default App.`, { timeoutMs: 60000, model: XKIRO_CODE_MODEL });
     if (!code) {
       via = 'offline template (xKiro unreachable \u2014 labeled honestly)';
       code = [
@@ -436,22 +436,55 @@ export async function maybeTelegram(userId: string, text: string) {
 }
 
 // ---------- optional xKiro LLM hook (key stays server-side, never reaches the client) ----------
-export async function xkiroChat(user: any, text: string, timeoutMs = 12000): Promise<string | null> {
+const XKIRO_UA = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.6478.122 Mobile Safari/537.36';
+const XKIRO_CODE_MODEL = 'mistralai/codestral-2508';
+const XKIRO_REASON_MODEL = 'qwen/qwen3-max:free';
+const xkiroBase = () => (process.env.XKIRO_BASE_URL || 'https://api.xkiro.ai/v1').replace(/\/$/, '');
+const xkiroHeaders = () => ({ 'content-type': 'application/json', authorization: 'Bearer ' + process.env.XKIRO_API_KEY, 'user-agent': XKIRO_UA });
+
+let modelCache: { ts: number; models: any[] } | null = null;
+export async function xkiroModels(): Promise<any[]> {
+  if (modelCache && Date.now() - modelCache.ts < 600000) return modelCache.models;
+  if (!process.env.XKIRO_API_KEY) return [];
+  try {
+    const r = await fetch(xkiroBase() + '/models', { headers: xkiroHeaders() });
+    if (!r.ok) return modelCache ? modelCache.models : [];
+    const j: any = await r.json();
+    modelCache = { ts: Date.now(), models: (j.data || []).map((m: any) => ({ id: m.id, name: m.display_name || m.id, tier: m.access_tier, caps: m.capabilities || {} })) };
+    return modelCache.models;
+  } catch { return modelCache ? modelCache.models : []; }
+}
+
+export async function xkiroChat(
+  user: any,
+  text: string,
+  opts: { timeoutMs?: number; model?: string; images?: { mime: string; data: string }[] } = {},
+): Promise<string | null> {
   const key = process.env.XKIRO_API_KEY;
   if (!key) return null;
-  const base = (process.env.XKIRO_BASE_URL || 'https://api.xkiro.ai/v1').replace(/\/$/, '');
+  const timeoutMs = opts.timeoutMs || 12000;
+  const preferred = opts.model || (user && user.id ? settingsOf(user.id).model : '') || process.env.XKIRO_MODEL || 'xkiro-large';
   try {
     const ctrl = new AbortController();
     const to = setTimeout(() => ctrl.abort(), timeoutMs);
-    const r = await fetch(base + '/chat/completions', {
+    const userMsg: any = (opts.images && opts.images.length)
+      ? {
+          role: 'user',
+          content: [
+            { type: 'text', text },
+            ...opts.images.map((im) => ({ type: 'image_url', image_url: { url: `data:${im.mime};base64,${im.data}` } })),
+          ],
+        }
+      : { role: 'user', content: text };
+    const r = await fetch(xkiroBase() + '/chat/completions', {
       method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: 'Bearer ' + key },
+      headers: xkiroHeaders(),
       signal: ctrl.signal,
       body: JSON.stringify({
-        model: process.env.XKIRO_MODEL || 'xkiro-large',
+        model: preferred,
         messages: [
           { role: 'system', content: 'You are Astra, a personal AI agent. Tagline: Your AI Agent. Always On. Be concise, professional and execution-oriented.' },
-          { role: 'user', content: text },
+          userMsg,
         ],
       }),
     });
@@ -486,7 +519,12 @@ export async function handleChat(user: any, text: string, attachments: any[], co
   conv.messages.push({ role: 'user', text, ts: now(), attachments: (attachments || []).map((a) => a.name) });
   const type = intent(text);
   if (type === 'chat') {
-    const reply = (await xkiroChat(user, text)) || cognition(user, text);
+    const imgs = (attachments || [])
+      .filter((a) => (a.mime || '').startsWith('image/') && a.data && a.data.length < 4000000)
+      .map((a) => ({ mime: a.mime, data: a.data }));
+    const visionModel = (settingsOf(user.id) as any).model || 'qwen/qwen3.5-omni-plus:free';
+    let reply = imgs.length ? await xkiroChat(user, text, { images: imgs, timeoutMs: 75000, model: visionModel }) : null;
+    if (!reply) reply = (await xkiroChat(user, text)) || cognition(user, text);
     conv.messages.push({ role: 'astra', text: reply, ts: now() });
     save();
     return { kind: 'reply', text: reply, conversationId: conv.id };
