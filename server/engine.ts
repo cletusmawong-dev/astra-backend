@@ -86,6 +86,17 @@ const exec: Record<string, (task: any, step: any) => Promise<void | 'awaiting'>>
   async understand(task, step) {
     await sleep(250);
     log(task, step, `Intent classified: ${task.type}`);
+    if (task.type === 'website' && task.opts.reviseOf) {
+      const src = db.tasks.find((t: any) => t.id === task.opts.reviseOf && t.userId === task.userId);
+      if (src) {
+        task.meta.business = src.meta.business; task.meta.industry = src.meta.industry; task.meta.want = src.meta.want || [];
+        task.meta.reviseOf = src.id; task.meta.revision = (src.meta.revision || 1) + 1;
+        log(task, step, `Reopening project ${src.id} (v${src.meta.revision || 1}) \u2014 surgical revision, never a rebuild.`);
+        log(task, step, `Carried context: ${task.meta.business} \u00B7 ${task.meta.industry} \u00B7 sections ${(task.meta.want || []).join(', ') || 'hero'}`);
+        return;
+      }
+      log(task, step, 'Revision source not found \u2014 treating as a fresh brief.');
+    }
     if (task.type === 'website') {
       const b = G.parseBrief(task.prompt);
       task.meta.business = b.business; task.meta.industry = b.industry.name; task.meta.want = b.want;
@@ -123,22 +134,47 @@ const exec: Record<string, (task: any, step: any) => Promise<void | 'awaiting'>>
     const dir = path.join(taskDir(task.id), 'site'); fs.mkdirSync(dir, { recursive: true });
     const notes = task.fixNotes || [];
     if (notes.length) log(task, step, `Applying Review Agent fixes: ${notes.join('; ')}`);
-    const brief = G.parseBrief(task.prompt);
-    task.meta.business = task.meta.business || brief.business;
+    const srcTask = task.opts.reviseOf ? db.tasks.find((t: any) => t.id === task.opts.reviseOf && t.userId === task.userId) : null;
+    const sdir = srcTask ? path.join(taskDir(srcTask.id), 'site') : null;
+    const curHtml = sdir ? (() => { try { return fs.readFileSync(path.join(sdir, 'index.html'), 'utf8'); } catch { return ''; } })() : '';
+    const curCss = sdir ? (() => { try { return fs.readFileSync(path.join(sdir, 'styles.css'), 'utf8'); } catch { return ''; } })() : '';
+    const revising = !!srcTask && !!curHtml;
     let stylePref = '';
     try { stylePref = settingsOf(task.userId).style || ''; } catch {}
-    log(task, step, 'Searching online for real photography\u2026');
-    const queries = SCENES[task.meta.industry] || [task.meta.industry + ' interior'];
     let photos: string[] = [];
-    for (const q of queries) {
-      if (photos.length >= 6) break;
-      for (const u of await searchImages(q, 6)) if (!photos.includes(u)) photos.push(u);
+    if (!revising) {
+      const brief = G.parseBrief(task.prompt);
+      task.meta.business = task.meta.business || brief.business;
+      log(task, step, 'Searching online for real photography\u2026');
+      const queries = SCENES[task.meta.industry] || [task.meta.industry + ' interior'];
+      for (const q of queries) {
+        if (photos.length >= 6) break;
+        for (const u of await searchImages(q, 6)) if (!photos.includes(u)) photos.push(u);
+      }
+      photos = photos.slice(0, 6);
+      if (photos.length) log(task, step, `Found ${photos.length} real photos via image-search module.`);
+      else log(task, step, 'Image search returned nothing \u2014 site will use CSS/SVG art (labeled honestly).');
+    } else {
+      const prevRev = srcTask!.meta.revision || 1;
+      const vdir = path.join(dir, 'versions', 'v' + prevRev);
+      fs.mkdirSync(vdir, { recursive: true });
+      for (const f of ['index.html', 'styles.css', 'app.js']) {
+        const sf = path.join(sdir!, f);
+        if (fs.existsSync(sf)) fs.copyFileSync(sf, path.join(vdir, f));
+      }
+      log(task, step, `Project files loaded (${kb(Buffer.byteLength(curHtml))} html) \u2014 previous version snapshotted to versions/v${prevRev}.`);
     }
-    photos = photos.slice(0, 6);
-    if (photos.length) log(task, step, `Found ${photos.length} real photos via image-search module.`);
-    else log(task, step, 'Image search returned nothing \u2014 site will use CSS/SVG art (labeled honestly).');
-    log(task, step, 'Commissioning bespoke modern site from xKiro module\u2026');
-    let html = await xkiroChat(null, [
+    log(task, step, revising ? 'Applying requested changes surgically via xKiro module\u2026' : 'Commissioning bespoke modern site from xKiro module\u2026');
+    let html = revising
+      ? await xkiroChat(null, [
+          'You are maintaining an existing production website. Apply the change request SURGICALLY.',
+          'CURRENT index.html:\n' + curHtml.slice(0, 24000),
+          'CURRENT styles.css:\n' + curCss.slice(0, 12000),
+          `CHANGE REQUEST: "${task.prompt}"`,
+          'Keep every other section, headline, copy, image URL, Google Fonts link and element id intact unless the request says otherwise. Preserve all responsive @media rules and prefers-reduced-motion. Keep tags balanced, alt attributes on images, no external scripts. Return the COMPLETE updated HTML document with ALL CSS inside one <style> block and JS in one inline <script>. No markdown, no fences, no commentary.',
+        ].join('\n'), { timeoutMs: 90000, model: 'qwen/qwen3-max:free' })
+      : await xkiroChat(null, [
+
       'You are an award-winning web designer in 2026. Build ONE complete, bespoke single-page marketing website as a single HTML document.',
       `Business: "${task.meta.business}". Industry: ${task.meta.industry}. Original request: "${task.prompt}".`,
       (task.meta.want || []).length ? `Required sections, each with the EXACT id given, plus a hero: ${(task.meta.want || []).map((w: string) => '<section id="' + w + '">').join(' ')}` : '',
@@ -148,7 +184,8 @@ const exec: Record<string, (task: any, step: any) => Promise<void | 'awaiting'>>
       'Design language: contemporary 2026 aesthetic \u2014 full-bleed photographic hero with dark gradient scrim and bold display headline, generous whitespace, CSS grid layouts, soft rounded cards, subtle glass panels, refined 2\u20133 color palette, elegant type pairing via Google Fonts (one <link> to fonts.googleapis.com is ALLOWED and expected), smooth scroll, hover micro-interactions, scroll-reveal via tiny inline JS. Absolutely avoid dated looks: no table layouts, no bevels, no clip-art, no tiled backgrounds, no center-aligned 90s blocks.',
       'Rules: 100% original copy tailored to this exact business (real-sounding service names, prices, testimonials with customer names \u2014 never lorem ipsum). Inside one <style> block include at least two @media breakpoints and a prefers-reduced-motion rule. Every <img> needs an alt attribute and must use a manifest URL. Allowed external hosts: images from the manifest, fonts.googleapis.com / fonts.gstatic.com ONLY; no other http URLs, no external scripts. Include <meta name="viewport">, a <title>, exactly one <h1>. Optionally one tiny inline <script> (no eval, no document.write). All tags balanced. Return ONLY the raw HTML document \u2014 no markdown, no fences, no commentary.',
     ].filter(Boolean).join('\n'), { timeoutMs: 90000, model: 'qwen/qwen3-max:free' });
-    let via = 'xKiro module';
+    let via = revising ? 'xKiro module (surgical revision)' : 'xKiro module';
+    if (!html && revising) throw new Error('xKiro unreachable \u2014 revision NOT applied; project unchanged.');
     if (!html) {
       via = 'procedural generator (xKiro unreachable \u2014 labeled honestly)';
       const out = G.genWebsite(task.prompt, task.opts.variant || 'website', notes, task.id, task.meta.palIndex);
