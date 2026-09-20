@@ -152,7 +152,7 @@ const exec: Record<string, (task: any, step: any) => Promise<void | 'awaiting'>>
     if (fixes.length) log(task, step, `Applying Review Agent fixes: ${fixes.join('; ')}`);
     log(task, step, 'Requesting Expo + TypeScript scaffold from xKiro (raw App.tsx source)…');
     let via = 'xKiro';
-    let code = await xkiroChat(null, `Scaffold a single-file React Native Expo app in TypeScript. Brief: "${String(task.prompt).slice(0, 800)}".${fixes.length ? ` Required fixes: ${fixes.join('; ')}.` : ''} Output ONLY raw App.tsx source code: no markdown, no fences, no explanations. Use only react-native core components, typed props, and end with export default App.`);
+    let code = await xkiroChat(null, `Scaffold a single-file React Native Expo app in TypeScript. Brief: "${String(task.prompt).slice(0, 800)}".${fixes.length ? ` Required fixes: ${fixes.join('; ')}.` : ''} Output ONLY raw App.tsx source code: no markdown, no fences, no explanations. Use only react-native core components, typed props, and end with export default App.`, 45000);
     if (!code) {
       via = 'offline template (xKiro unreachable \u2014 labeled honestly)';
       code = [
@@ -436,13 +436,13 @@ export async function maybeTelegram(userId: string, text: string) {
 }
 
 // ---------- optional xKiro LLM hook (key stays server-side, never reaches the client) ----------
-export async function xkiroChat(user: any, text: string): Promise<string | null> {
+export async function xkiroChat(user: any, text: string, timeoutMs = 12000): Promise<string | null> {
   const key = process.env.XKIRO_API_KEY;
   if (!key) return null;
   const base = (process.env.XKIRO_BASE_URL || 'https://api.xkiro.ai/v1').replace(/\/$/, '');
   try {
     const ctrl = new AbortController();
-    const to = setTimeout(() => ctrl.abort(), 12000);
+    const to = setTimeout(() => ctrl.abort(), timeoutMs);
     const r = await fetch(base + '/chat/completions', {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: 'Bearer ' + key },
