@@ -12,10 +12,10 @@ const INDUSTRIES: any[] = [
   { keys: ['restaurant', 'cafe', 'coffee', 'food', 'bakery', 'kitchen'], name: 'hospitality', tag: 'Honest food, made fresh every morning.', services: ['Seasonal Menu', 'Private Events', 'Catering', 'Chef\u2019s Table', 'Gift Cards'] },
   { keys: ['fashion', 'boutique', 'clothing', 'style'], name: 'fashion', tag: 'Considered pieces for every day.', services: ['New Arrivals', 'Collections', 'Personal Styling', 'Alterations', 'Gift Cards'] },
   { keys: ['tech', 'software', 'startup', 'saas', 'app'], name: 'technology', tag: 'Software that moves your business forward.', services: ['Product', 'Integrations', 'Analytics', 'Security', 'Support'] },
+  { keys: ['real estate', 'estate', 'property', 'realty'], name: 'realestate', tag: 'Find the place that fits.', services: ['Buy', 'Rent', 'Valuations', 'Management', 'Consulting'] },
   { keys: ['consult', 'agency', 'law', 'account', 'finance'], name: 'professional', tag: 'Clear advice. Measurable results.', services: ['Strategy', 'Advisory', 'Compliance', 'Reporting', 'Training'] },
   { keys: ['gym', 'fitness', 'yoga', 'train'], name: 'fitness', tag: 'Stronger every session.', services: ['Membership', 'Personal Training', 'Classes', 'Nutrition', 'Recovery'] },
   { keys: ['salon', 'beauty', 'spa', 'hair'], name: 'beauty', tag: 'Care that shows.', services: ['Cuts & Color', 'Skin Care', 'Nails', 'Bridal', 'Products'] },
-  { keys: ['real estate', 'estate', 'property', 'realty'], name: 'realestate', tag: 'Find the place that fits.', services: ['Buy', 'Rent', 'Valuations', 'Management', 'Consulting'] },
 ];
 export const PALETTES: any[] = [
   { bg: '#0b1020', ink: '#eef2ff', accent: '#6d8dff', accent2: '#9a6bff', card: '#121a33' },
