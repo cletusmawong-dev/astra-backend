@@ -42,8 +42,24 @@ function limited(ip: string): boolean {
 const MIME: Record<string, string> = { html: 'text/html', css: 'text/css', js: 'text/javascript', svg: 'image/svg+xml', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', ico: 'image/x-icon', json: 'application/json', webmanifest: 'application/manifest+json', md: 'text/markdown', pdf: 'application/pdf', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', txt: 'text/plain', csv: 'text/csv' };
 function serveFile(res: http.ServerResponse, file: string) {
   try {
-    const buf = fs.readFileSync(file);
     const ext = path.extname(file).slice(1);
+    let buf = fs.readFileSync(file);
+    if (ext === 'html') {
+      let html = buf.toString('utf8');
+      let changed = false;
+      const sibling = (name: string) => path.join(path.dirname(file), name);
+      if (!/styles\.css/.test(html) && fs.existsSync(sibling('styles.css'))) {
+        const link = '<link rel="stylesheet" href="styles.css">';
+        html = /<\/head>/i.test(html) ? html.replace(/<\/head>/i, link + '</head>') : link + '\n' + html;
+        changed = true;
+      }
+      if (!/app\.js/.test(html) && fs.existsSync(sibling('app.js'))) {
+        const tag = '<script src="app.js"></script>';
+        html = /<\/body>/i.test(html) ? html.replace(/<\/body>/i, tag + '</body>') : html + '\n' + tag;
+        changed = true;
+      }
+      if (changed) buf = Buffer.from(html, 'utf8');
+    }
     res.writeHead(200, { 'content-type': MIME[ext] || 'application/octet-stream', 'cache-control': 'no-cache' });
     res.end(buf);
   } catch { res.writeHead(404); res.end('not found'); }

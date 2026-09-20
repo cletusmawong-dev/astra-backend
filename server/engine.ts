@@ -151,6 +151,14 @@ const exec: Record<string, (task: any, step: any) => Promise<void | 'awaiting'>>
       const js = jsM ? jsM[1].trim() : '';
       html = html.replace(/<script(?![^>]*src)[^>]*>[\s\S]*?<\/script>/gi, '');
       if (!/^<!doctype/i.test(html)) html = '<!DOCTYPE html>\n' + html;
+      if (css && !/styles\.css/.test(html)) {
+        const link = '<link rel="stylesheet" href="styles.css">';
+        html = /<\/head>/i.test(html) ? html.replace(/<\/head>/i, link + '</head>') : link + '\n' + html;
+      }
+      if (js && !/app\.js/.test(html)) {
+        const tag = '<script src="app.js"></script>';
+        html = /<\/body>/i.test(html) ? html.replace(/<\/body>/i, tag + '</body>') : html + '\n' + tag;
+      }
       fs.writeFileSync(path.join(dir, 'index.html'), html);
       fs.writeFileSync(path.join(dir, 'styles.css'), css || '@media (max-width: 720px) { body { margin: 0; } }');
       fs.writeFileSync(path.join(dir, 'app.js'), js || '// no scripts');
