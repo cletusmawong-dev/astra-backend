@@ -123,12 +123,38 @@ const exec: Record<string, (task: any, step: any) => Promise<void | 'awaiting'>>
     const dir = path.join(taskDir(task.id), 'site'); fs.mkdirSync(dir, { recursive: true });
     const notes = task.fixNotes || [];
     if (notes.length) log(task, step, `Applying Review Agent fixes: ${notes.join('; ')}`);
-    await sleep(400);
-    const out = G.genWebsite(task.prompt, task.opts.variant || 'website', notes, task.id, task.meta.palIndex);
-    task.meta.business = out.meta.business;
-    for (const [name, content] of Object.entries(out.files)) {
-      fs.writeFileSync(path.join(dir, name), content as string);
-      log(task, step, `wrote site/${name} (${kb(Buffer.byteLength(content as string))})`);
+    const brief = G.parseBrief(task.prompt);
+    task.meta.business = task.meta.business || brief.business;
+    let stylePref = '';
+    try { stylePref = settingsOf(task.userId).style || ''; } catch {}
+    log(task, step, 'Commissioning bespoke site from xKiro module (unique per brief)\u2026');
+    let html = await xkiroChat(null, [
+      'You are a world-class web designer and developer. Build ONE complete, bespoke single-page marketing website as a single HTML document.',
+      `Business: "${task.meta.business}". Industry: ${task.meta.industry}. Original request: "${task.prompt}".`,
+      (task.meta.want || []).length ? `Required sections, each with the EXACT id given, plus a hero: ${(task.meta.want || []).map((w: string) => '<section id="' + w + '">').join(' ')}` : '',
+      notes.length ? `The reviewer demanded these fixes: ${notes.join('; ')}.` : '',
+      stylePref ? `Client visual preference: ${stylePref}.` : '',
+      'Rules: 100% original copy tailored to this exact business (real-sounding service names, prices, testimonials with customer names \u2014 never lorem ipsum). Choose a distinctive palette and typography that fits this industry; do not reuse a generic template. Inside one <style> block include at least two @media breakpoints and a prefers-reduced-motion rule. Every <img> needs an alt attribute; prefer inline SVG/CSS artwork; absolutely zero external URLs (no http links, no CDNs). Include <meta name="viewport">, a <title>, exactly one <h1>. Optionally one tiny inline <script> (no eval, no document.write). All tags balanced. Return ONLY the raw HTML document \u2014 no markdown, no fences, no commentary.',
+    ].filter(Boolean).join('\n'), { timeoutMs: 90000, model: 'qwen/qwen3-max:free' });
+    let via = 'xKiro module';
+    if (!html) {
+      via = 'procedural generator (xKiro unreachable \u2014 labeled honestly)';
+      const out = G.genWebsite(task.prompt, task.opts.variant || 'website', notes, task.id, task.meta.palIndex);
+      for (const [name, content] of Object.entries(out.files)) fs.writeFileSync(path.join(dir, name), content as string);
+      log(task, step, `Site written via ${via}.`);
+    } else {
+      html = html.replace(/```(html)?/gi, '').trim();
+      const cssM = html.match(/<style[^>]*>([\s\S]*?)<\/style>/i);
+      const css = cssM ? cssM[1].trim() : '';
+      html = html.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
+      const jsM = html.match(/<script(?![^>]*src)[^>]*>([\s\S]*?)<\/script>/i);
+      const js = jsM ? jsM[1].trim() : '';
+      html = html.replace(/<script(?![^>]*src)[^>]*>[\s\S]*?<\/script>/gi, '');
+      if (!/^<!doctype/i.test(html)) html = '<!DOCTYPE html>\n' + html;
+      fs.writeFileSync(path.join(dir, 'index.html'), html);
+      fs.writeFileSync(path.join(dir, 'styles.css'), css || '@media (max-width: 720px) { body { margin: 0; } }');
+      fs.writeFileSync(path.join(dir, 'app.js'), js || '// no scripts');
+      log(task, step, `Bespoke site written via ${via}: index.html ${kb(Buffer.byteLength(html))}, styles.css ${kb(Buffer.byteLength(css))}, app.js ${kb(Buffer.byteLength(js))}`);
     }
     task.artifacts = [
       { name: 'index.html', path: 'site/index.html', kind: 'code' },
