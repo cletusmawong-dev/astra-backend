@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: astra-backend
+    runtime: docker
+    dockerfilePath: ./deploy/Dockerfile
+    plan: free
+    healthCheckPath: /
+    envVars:
+      - key: XKIRO_API_KEY
+        sync: false
+      - key: XKIRO_BASE_URL
+        sync: false
+      - key: XKIRO_MODEL
+        sync: false
+      - key: TELEGRAM_TOKEN
+        sync: false
+      - key: NETLIFY_TOKEN
+        sync: false

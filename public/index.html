@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#04060f">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Astra">
+<title>Astra — Your AI Agent. Always On.</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%235b8cff'/%3E%3Cstop offset='1' stop-color='%238b5cf6'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='16' fill='%23070b18'/%3E%3Cpath d='M32 12 L48 50 H40 L32 28 L24 50 H16 Z' fill='url(%23g)'/%3E%3Cpath d='M32 34 l3 8 8 3 -8 3 -3 8 -3 -8 -8 -3 8 -3 z' fill='%23e7c873'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<div id="shell"><div id="app"></div></div>
+<div id="toasts"></div>
+<div id="modal"></div>
+<script src="/js/core.js"></script>
+<script src="/js/screens.js"></script>
+<script src="/js/screens2.js"></script>
+<script src="/js/screens3.js"></script>
+<script>
+window.addEventListener('error', function (e) {
+  var el = document.getElementById('app');
+  if (el && !el.innerHTML) el.innerHTML = '<div style="position:fixed;inset:0;z-index:99;padding:40px;color:#f8a;font:13px monospace">Astra client error: ' + (e.message || e) + '</div>';
+});
+A.boot().catch(function (e) {
+  document.getElementById('app').innerHTML = '<div style="position:fixed;inset:0;z-index:99;padding:40px;color:#f8a;font:13px monospace">BOOT ERROR: ' + e.message + '</div>';
+});
+</script>
+<script>if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));</script>
+</body>
+</html>

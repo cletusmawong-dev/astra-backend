@@ -1,0 +1,7 @@
+.env
+node_modules/
+*.apk
+db.json
+data/
+artifacts/
+sites/

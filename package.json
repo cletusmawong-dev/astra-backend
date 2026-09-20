@@ -1,0 +1,15 @@
+{
+  "name": "astra",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Astra — Your AI Agent. Always On. Full-stack AI agent system with planner, specialized agents, skills, tools, review agent and fix loop.",
+  "scripts": {
+    "start": "tsx server/main.ts"
+  },
+  "dependencies": {
+    "cloudflared": "^0.7.3",
+    "jsdom": "^29.1.1",
+    "tsx": "^4.23.13"
+  }
+}
