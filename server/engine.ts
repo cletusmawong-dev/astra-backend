@@ -30,6 +30,7 @@ function log(task: any, step: any, line: string) {
 export function intent(text: string): string {
   const t = text.toLowerCase();
   if (/every\s+(\d+\s*)?(minute|hour|morning|evening|day|week|monday|tuesday|wednesday|thursday|friday|saturday|sunday)|daily|weekly|reminder|automate|schedule|tell me when|notify me when/.test(t)) return 'automation';
+  if (/mobile app|android app|react native app|expo app|build (me )?an app|app for my|create (me )?an app/.test(t)) return 'app';
   if (/build|website|web app|webapp|landing|storefront|site for|make me a site|web tool|portfolio site/.test(t)) return 'website';
   if (/logo|image|picture|illustration|poster|icon|design kit|ui kit/.test(t)) return /design|ui kit|kit/.test(t) && !/logo|image|picture|poster|icon/.test(t) ? 'design' : 'image';
   if (/spreadsheet|excel|proposal|document|report doc|write me a|draft a|presentation|slides|pdf|word doc/.test(t) && !/research/.test(t)) return 'document';
@@ -50,6 +51,7 @@ export function planFor(type: string): any[] {
     case 'research': return [S('understand', 'Understand question', 'Master Agent', ''), S('fetch', 'Fetch live sources', 'Research Agent', 'web-research'), S('compile', 'Compile report', 'Research Agent', 'web-research'), S('review', 'Review', 'Review Agent', 'review-qa'), S('deliver', 'Deliver', 'Research Agent', 'web-research')];
     case 'data': return [S('understand', 'Understand data', 'Master Agent', ''), S('compute', 'Compute statistics', 'Data Agent', 'data-analysis'), S('review', 'Review', 'Review Agent', 'review-qa'), S('deliver', 'Deliver', 'Data Agent', 'data-analysis')];
     case 'automation': return [S('understand', 'Understand trigger', 'Master Agent', ''), S('register', 'Register automation', 'Automation Agent', 'automation'), S('confirm', 'Confirm schedule', 'Automation Agent', 'automation')];
+    case 'app': return [S('understand', 'Understand requirements', 'Master Agent', ''), S('scaffold', 'Scaffold project', 'Coding Agent', 'coding'), S('review', 'Review', 'Review Agent', 'review-qa'), S('deliver', 'Deliver', 'Coding Agent', 'coding')];
   }
   return [S('understand', 'Understand', 'Master Agent', '')];
 }
@@ -144,6 +146,56 @@ const exec: Record<string, (task: any, step: any) => Promise<void | 'awaiting'>>
     save();
   },
 
+  async scaffold(task, step) {
+    const dir = path.join(taskDir(task.id), 'app-project'); fs.mkdirSync(dir, { recursive: true });
+    const fixes = (task.fixNotes || []) as string[];
+    if (fixes.length) log(task, step, `Applying Review Agent fixes: ${fixes.join('; ')}`);
+    log(task, step, 'Requesting Expo + TypeScript scaffold from xKiro (raw App.tsx source)…');
+    let via = 'xKiro';
+    let code = await xkiroChat(null, `Scaffold a single-file React Native Expo app in TypeScript. Brief: "${String(task.prompt).slice(0, 800)}".${fixes.length ? ` Required fixes: ${fixes.join('; ')}.` : ''} Output ONLY raw App.tsx source code: no markdown, no fences, no explanations. Use only react-native core components, typed props, and end with export default App.`);
+    if (!code) {
+      via = 'offline template (xKiro unreachable \u2014 labeled honestly)';
+      code = [
+        "import React, { useState } from 'react';",
+        "import { SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';",
+        '',
+        '// Astra offline scaffold \u2014 brief: ' + String(task.prompt).slice(0, 160),
+        'export default function App() {',
+        '  const [ready] = useState(true);',
+        '  return (',
+        '    <SafeAreaView style={s.root}>',
+        '      <ScrollView contentContainerStyle={s.body}>',
+        "        <Text style={s.title}>Astra App Scaffold</Text>",
+        "        <Text style={s.sub}>{ready ? 'Ready for extension' : ''}</Text>",
+        "        <View style={s.card}><Text style={s.cardText}>Brief: " + String(task.prompt).slice(0, 160).replace(/[`$\\]/g, '') + '</Text></View>',
+        '      </ScrollView>',
+        '    </SafeAreaView>',
+        '  );',
+        '}',
+        '',
+        'const s = StyleSheet.create({',
+        "  root: { flex: 1, backgroundColor: '#05070F' },",
+        '  body: { padding: 24 },',
+        "  title: { color: '#fff', fontSize: 24, fontWeight: '800' },",
+        "  sub: { color: '#8fa3ff', marginBottom: 12 },",
+        "  card: { backgroundColor: '#101632', borderRadius: 16, padding: 16 },",
+        "  cardText: { color: '#cbd5ff', lineHeight: 22 },",
+        '});',
+        '',
+      ].join('\n');
+    }
+    code = code.replace(/```[a-z]*\n?/g, '').trim();
+    fs.writeFileSync(path.join(dir, 'App.tsx'), code);
+    fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ name: 'astra-app-' + task.id.slice(-6), version: '0.1.0', main: 'expo/AppEntry.js', scripts: { start: 'expo start', android: 'expo run:android' }, dependencies: { expo: '~57.0.0', react: '19.2.3', 'react-native': '0.86.3' } }, null, 2));
+    fs.writeFileSync(path.join(dir, 'README.md'), `# Astra App Project\n\nBrief: ${task.prompt}\n\nScaffold generated by: ${via}\nReviewed by: Astra Review Agent\n\nRun locally:\n\n    npx create-expo-app@latest my-app && replace App.tsx with this file\n    npx expo start\n\nNote: on-device builds happen on your machine via EAS. Astra generated and reviewed the source; it does not claim a device build here.\n`);
+    task.artifacts = [
+      { name: 'App.tsx', path: 'app-project/App.tsx', kind: 'code' },
+      { name: 'package.json', path: 'app-project/package.json', kind: 'code' },
+      { name: 'README.md', path: 'app-project/README.md', kind: 'document' },
+    ];
+    log(task, step, `Scaffold written via ${via}: App.tsx (${kb(Buffer.byteLength(code))}), package.json, README.md`);
+  },
+
   async review(task, step) {
     await sleep(300);
     let findings: R.Finding[] = [...(step.findings || [])];
@@ -158,6 +210,15 @@ const exec: Record<string, (task: any, step: any) => Promise<void | 'awaiting'>>
       findings = [...findings, ...R.checkSvg(svg, task.type)];
     }
     if (task.type === 'document') findings = [...findings, ...R.checkDoc(taskDir(task.id), task.opts.formats || ['pdf'])];
+    if (task.type === 'app') {
+      const code = (() => { try { return fs.readFileSync(path.join(taskDir(task.id), 'app-project', 'App.tsx'), 'utf8'); } catch { return ''; } })();
+      if (!code) findings.push({ severity: 'critical', msg: 'App.tsx missing from scaffold', fix: 'Regenerate the scaffold' } as any);
+      else {
+        if (!/export default/.test(code)) findings.push({ severity: 'critical', msg: 'App.tsx has no default export', fix: 'End the file with export default App' } as any);
+        if (/```/.test(code)) findings.push({ severity: 'critical', msg: 'Markdown fences leaked into App.tsx', fix: 'Strip markdown fences from the generated source' } as any);
+        if (code.length < 400) findings.push({ severity: 'critical', msg: 'App.tsx is suspiciously small for the brief', fix: 'Generate a fuller implementation covering the brief' } as any);
+      }
+    }
     if (task.type === 'research') findings = [...findings, ...R.checkResearch(task.meta.md || '', !!task.meta.online)];
     const critical = findings.filter((f) => f.severity === 'critical');
     for (const f of findings) log(task, step, `${f.severity === 'critical' ? '\u2717' : '\u25CB'} [${f.severity}] ${f.msg}`);
@@ -166,7 +227,7 @@ const exec: Record<string, (task: any, step: any) => Promise<void | 'awaiting'>>
       task.reviewLoops++;
       task.fixNotes = [...new Set(critical.filter((f) => f.fix).map((f) => f.fix!))];
       log(task, step, `DO NOT DELIVER \u2014 ${critical.length} critical finding(s). Sending back to producing agent (fix loop ${task.reviewLoops}).`);
-      for (const s of task.steps) if (['develop', 'test', 'draft'].includes(s.key)) { s.status = 'retry'; s.logs.push('(re-run after Review Agent feedback)'); }
+      for (const s of task.steps) if (['develop', 'test', 'draft', 'scaffold'].includes(s.key)) { s.status = 'retry'; s.logs.push('(re-run after Review Agent feedback)'); }
       task.review = { approved: false, findings, loops: task.reviewLoops };
       return;
     }
@@ -347,7 +408,7 @@ export async function runTask(taskId: string) {
     }
     if (task.status !== 'failed' && task.status !== 'waiting_approval') {
       task.status = 'done'; task.progress = 100; task.completedAt = now();
-      const title = task.type === 'website' ? `Website for ${task.meta.business || 'you'} is ready` : task.type === 'automation' ? 'Automation is live' : `Task completed: ${task.type}`;
+      const title = task.type === 'website' ? `Website for ${task.meta.business || 'you'} is ready` : task.type === 'automation' ? 'Automation is live' : task.type === 'app' ? 'App scaffold ready' : `Task completed: ${task.type}`;
       const n = notify(task.userId, title, 'Review Agent approved the result. Open the task to view artifacts.', 'success');
       onEvent(task.userId, { type: 'notification', n });
       maybeTelegram(task.userId, `\u2705 ${title}`);
