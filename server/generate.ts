@@ -15,7 +15,7 @@ const INDUSTRIES: any[] = [
   { keys: ['consult', 'agency', 'law', 'account', 'finance'], name: 'professional', tag: 'Clear advice. Measurable results.', services: ['Strategy', 'Advisory', 'Compliance', 'Reporting', 'Training'] },
   { keys: ['gym', 'fitness', 'yoga', 'train'], name: 'fitness', tag: 'Stronger every session.', services: ['Membership', 'Personal Training', 'Classes', 'Nutrition', 'Recovery'] },
   { keys: ['salon', 'beauty', 'spa', 'hair'], name: 'beauty', tag: 'Care that shows.', services: ['Cuts & Color', 'Skin Care', 'Nails', 'Bridal', 'Products'] },
-  { keys: ['estate', 'property', 'realty', 'home'], name: 'realestate', tag: 'Find the place that fits.', services: ['Buy', 'Rent', 'Valuations', 'Management', 'Consulting'] },
+  { keys: ['real estate', 'estate', 'property', 'realty'], name: 'realestate', tag: 'Find the place that fits.', services: ['Buy', 'Rent', 'Valuations', 'Management', 'Consulting'] },
 ];
 export const PALETTES: any[] = [
   { bg: '#0b1020', ink: '#eef2ff', accent: '#6d8dff', accent2: '#9a6bff', card: '#121a33' },
