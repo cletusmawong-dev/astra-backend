@@ -128,8 +128,13 @@ const exec: Record<string, (task: any, step: any) => Promise<void | 'awaiting'>>
     let stylePref = '';
     try { stylePref = settingsOf(task.userId).style || ''; } catch {}
     log(task, step, 'Searching online for real photography\u2026');
-    let photos = await searchImages(SCENES[task.meta.industry] || task.meta.industry + ' interior', 6);
-    if (photos.length < 3) photos = await searchImages(`${task.meta.business} ${task.meta.industry}`, 6);
+    const queries = SCENES[task.meta.industry] || [task.meta.industry + ' interior'];
+    let photos: string[] = [];
+    for (const q of queries) {
+      if (photos.length >= 6) break;
+      for (const u of await searchImages(q, 6)) if (!photos.includes(u)) photos.push(u);
+    }
+    photos = photos.slice(0, 6);
     if (photos.length) log(task, step, `Found ${photos.length} real photos via image-search module.`);
     else log(task, step, 'Image search returned nothing \u2014 site will use CSS/SVG art (labeled honestly).');
     log(task, step, 'Commissioning bespoke modern site from xKiro module\u2026');
@@ -484,16 +489,16 @@ const xkiroBase = () => (process.env.XKIRO_BASE_URL || 'https://api.xkiro.ai/v1'
 const xkiroHeaders = () => ({ 'content-type': 'application/json', authorization: 'Bearer ' + process.env.XKIRO_API_KEY, 'user-agent': XKIRO_UA });
 
 // ---------- online image search module (keyless, real photos) ----------
-const SCENES: Record<string, string> = {
-  hospitality: 'cafe restaurant interior food',
-  printing: 'printing press workshop',
-  fashion: 'fashion boutique clothing store',
-  technology: 'modern office technology workspace',
-  professional: 'modern office meeting business',
-  fitness: 'gym fitness training',
-  beauty: 'beauty salon interior',
-  realestate: 'modern house exterior architecture',
-  business: 'modern storefront interior',
+const SCENES: Record<string, string[]> = {
+  hospitality: ['cafe interior', 'bakery bread', 'restaurant food'],
+  printing: ['printing press', 'print shop'],
+  fashion: ['fashion boutique', 'clothing store'],
+  technology: ['modern office', 'software workspace'],
+  professional: ['office meeting', 'business team'],
+  fitness: ['gym training', 'fitness workout'],
+  beauty: ['beauty salon', 'hair salon'],
+  realestate: ['apartment building exterior', 'villa exterior', 'residential architecture'],
+  business: ['shop interior', 'retail store'],
 };
 export async function searchImages(query: string, count = 6): Promise<string[]> {
   try {
