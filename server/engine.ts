@@ -127,14 +127,21 @@ const exec: Record<string, (task: any, step: any) => Promise<void | 'awaiting'>>
     task.meta.business = task.meta.business || brief.business;
     let stylePref = '';
     try { stylePref = settingsOf(task.userId).style || ''; } catch {}
-    log(task, step, 'Commissioning bespoke site from xKiro module (unique per brief)\u2026');
+    log(task, step, 'Searching online for real photography\u2026');
+    let photos = await searchImages(SCENES[task.meta.industry] || task.meta.industry + ' interior', 6);
+    if (photos.length < 3) photos = await searchImages(`${task.meta.business} ${task.meta.industry}`, 6);
+    if (photos.length) log(task, step, `Found ${photos.length} real photos via image-search module.`);
+    else log(task, step, 'Image search returned nothing \u2014 site will use CSS/SVG art (labeled honestly).');
+    log(task, step, 'Commissioning bespoke modern site from xKiro module\u2026');
     let html = await xkiroChat(null, [
-      'You are a world-class web designer and developer. Build ONE complete, bespoke single-page marketing website as a single HTML document.',
+      'You are an award-winning web designer in 2026. Build ONE complete, bespoke single-page marketing website as a single HTML document.',
       `Business: "${task.meta.business}". Industry: ${task.meta.industry}. Original request: "${task.prompt}".`,
       (task.meta.want || []).length ? `Required sections, each with the EXACT id given, plus a hero: ${(task.meta.want || []).map((w: string) => '<section id="' + w + '">').join(' ')}` : '',
+      photos.length ? `REAL PHOTOGRAPHY MANIFEST \u2014 these URLs are verified live photos; use them (hero + section imagery), never invent image URLs:\n${photos.map((p, i) => i + 1 + '. ' + p).join('\n')}` : '',
       notes.length ? `The reviewer demanded these fixes: ${notes.join('; ')}.` : '',
       stylePref ? `Client visual preference: ${stylePref}.` : '',
-      'Rules: 100% original copy tailored to this exact business (real-sounding service names, prices, testimonials with customer names \u2014 never lorem ipsum). Choose a distinctive palette and typography that fits this industry; do not reuse a generic template. Inside one <style> block include at least two @media breakpoints and a prefers-reduced-motion rule. Every <img> needs an alt attribute; prefer inline SVG/CSS artwork; absolutely zero external URLs (no http links, no CDNs). Include <meta name="viewport">, a <title>, exactly one <h1>. Optionally one tiny inline <script> (no eval, no document.write). All tags balanced. Return ONLY the raw HTML document \u2014 no markdown, no fences, no commentary.',
+      'Design language: contemporary 2026 aesthetic \u2014 full-bleed photographic hero with dark gradient scrim and bold display headline, generous whitespace, CSS grid layouts, soft rounded cards, subtle glass panels, refined 2\u20133 color palette, elegant type pairing via Google Fonts (one <link> to fonts.googleapis.com is ALLOWED and expected), smooth scroll, hover micro-interactions, scroll-reveal via tiny inline JS. Absolutely avoid dated looks: no table layouts, no bevels, no clip-art, no tiled backgrounds, no center-aligned 90s blocks.',
+      'Rules: 100% original copy tailored to this exact business (real-sounding service names, prices, testimonials with customer names \u2014 never lorem ipsum). Inside one <style> block include at least two @media breakpoints and a prefers-reduced-motion rule. Every <img> needs an alt attribute and must use a manifest URL. Allowed external hosts: images from the manifest, fonts.googleapis.com / fonts.gstatic.com ONLY; no other http URLs, no external scripts. Include <meta name="viewport">, a <title>, exactly one <h1>. Optionally one tiny inline <script> (no eval, no document.write). All tags balanced. Return ONLY the raw HTML document \u2014 no markdown, no fences, no commentary.',
     ].filter(Boolean).join('\n'), { timeoutMs: 90000, model: 'qwen/qwen3-max:free' });
     let via = 'xKiro module';
     if (!html) {
@@ -475,6 +482,37 @@ const XKIRO_CODE_MODEL = 'mistralai/codestral-2508';
 const XKIRO_REASON_MODEL = 'qwen/qwen3-max:free';
 const xkiroBase = () => (process.env.XKIRO_BASE_URL || 'https://api.xkiro.ai/v1').replace(/\/$/, '');
 const xkiroHeaders = () => ({ 'content-type': 'application/json', authorization: 'Bearer ' + process.env.XKIRO_API_KEY, 'user-agent': XKIRO_UA });
+
+// ---------- online image search module (keyless, real photos) ----------
+const SCENES: Record<string, string> = {
+  hospitality: 'cafe restaurant interior food',
+  printing: 'printing press workshop',
+  fashion: 'fashion boutique clothing store',
+  technology: 'modern office technology workspace',
+  professional: 'modern office meeting business',
+  fitness: 'gym fitness training',
+  beauty: 'beauty salon interior',
+  realestate: 'modern house exterior architecture',
+  business: 'modern storefront interior',
+};
+export async function searchImages(query: string, count = 6): Promise<string[]> {
+  try {
+    const u = 'https://commons.wikimedia.org/w/api.php?action=query&format=json&generator=search&gsrsearch='
+      + encodeURIComponent(query + ' filetype:bitmap') + '&gsrnamespace=6&gsrlimit=' + count
+      + '&prop=imageinfo&iiprop=url|size|mime&iiurlwidth=1600';
+    const r = await fetch(u, { headers: { 'user-agent': 'AstraAgent/1.0 (astra@example.com)', accept: 'application/json' } });
+    if (!r.ok) return [];
+    const j: any = await r.json();
+    const pages = j?.query?.pages || {};
+    const out: { url: string; w: number }[] = [];
+    for (const p of Object.values(pages) as any[]) {
+      const ii = p?.imageinfo?.[0];
+      if (ii && /jpeg|jpg|png/i.test(ii.mime || '') && (ii.width || 0) >= 800) out.push({ url: ii.thumburl || ii.url, w: ii.width || 0 });
+    }
+    out.sort((a, b) => b.w - a.w);
+    return out.map((o) => o.url).slice(0, count);
+  } catch { return []; }
+}
 
 let modelCache: { ts: number; models: any[] } | null = null;
 export async function xkiroModels(): Promise<any[]> {

@@ -45,7 +45,16 @@ export function testWebsite(dir: string): { logs: string[]; findings: Finding[] 
   check(bal.length === 0, 'markup balanced (' + (bal[0] || 'ok') + ')', { severity: 'critical', msg: 'Broken markup: ' + bal.slice(0, 3).join(', '), fix: 'fix tag balance' });
   check(/@media/.test(css), 'media queries present (responsive)', { severity: 'critical', msg: 'No responsive breakpoints', fix: 'add media queries' });
   check(/prefers-reduced-motion/.test(css), 'reduced-motion respected (a11y)');
-  check(!/<script[^>]+src="http/.test(html) && !/<link[^>]+href="http/.test(html), 'no untrusted external resources (security)', { severity: 'critical', msg: 'External script/link injected', fix: 'remove external resources' });
+  const TRUSTED_IMG = /wikimedia\.org|images\.unsplash\.com/;
+  const TRUSTED_LINK = /fonts\.googleapis\.com|fonts\.gstatic\.com/;
+  const extScripts = (html.match(/<script[^>]+src="(https?:[^"]+)"/g) || []).map((m) => m.match(/src="(https?:[^"]+)"/)![1]);
+  const extLinks = (html.match(/<link[^>]+href="(https?:[^"]+)"/g) || []).map((m) => m.match(/href="(https?:[^"]+)"/)![1]);
+  const extImgs = (html.match(/<img[^>]+src="(https?:[^"]+)"/g) || []).map((m) => m.match(/src="(https?:[^"]+)"/)![1]);
+  const badExt =
+    extScripts.length > 0 ||
+    extLinks.some((h) => !TRUSTED_LINK.test(h)) ||
+    extImgs.some((h) => !TRUSTED_IMG.test(h));
+  check(!badExt, 'only trusted external resources (security)', { severity: 'critical', msg: 'Untrusted external resource injected', fix: 'remove external resources' });
   check(!/document\.write|eval\(/.test(js), 'no unsafe JS APIs (security)', { severity: 'critical', msg: 'Unsafe JS API used', fix: 'remove unsafe JS' });
   check(/role="status"|aria-live/.test(html), 'form status announced to screen readers');
   const total = html.length + css.length + js.length;
